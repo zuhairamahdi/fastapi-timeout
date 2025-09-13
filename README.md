@@ -64,11 +64,13 @@ async def add_timeout(request: Request, call_next):
 app.add_middleware(
     TimeoutMiddleware,
     timeout_seconds=10.0,              # Timeout after 10 seconds
-    timeout_status_code=408,           # Return 408 Request Timeout
+    timeout_status_code=503,           # Return 503 Service Unavailable  
     timeout_message="Request timeout", # Custom error message
     include_process_time=True          # Include processing time in response
 )
 ```
+
+**⚠️ Important:** Do not use HTTP status code 408 (Request Timeout) as it causes browsers and HTTP clients to automatically retry requests, which can lead to unexpected behavior and increased server load. Use 504 (Gateway Timeout) or 503 (Service Unavailable) instead.
 
 ### Advanced Configuration with Custom Handler
 
@@ -112,7 +114,9 @@ When a request times out, the middleware returns a JSON response:
 
 ### Customizable Fields
 
-- `timeout_status_code`: HTTP status code (default: 504)
+- `timeout_status_code`: HTTP status code (default: 504 Gateway Timeout)
+  - **⚠️ Avoid 408 (Request Timeout)** - causes automatic retries in browsers/clients
+  - **Recommended**: 504 (Gateway Timeout) or 503 (Service Unavailable)
 - `timeout_message`: Error message (default: "Request processing time exceeded limit")
 - `include_process_time`: Whether to include actual processing time (default: True)
 

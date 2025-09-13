@@ -15,7 +15,7 @@ def app_with_timeout():
     app.add_middleware(
         TimeoutMiddleware,
         timeout_seconds=1.0,  # 1 second timeout for fast tests
-        timeout_status_code=504,
+        timeout_status_code=504,  # Gateway Timeout instead of 408
         timeout_message="Test timeout",
         include_process_time=True
     )
@@ -60,7 +60,7 @@ def test_instant_endpoint_completes(client):
 def test_slow_endpoint_times_out(client):
     """Test that slow endpoints trigger timeout."""
     response = client.get("/slow")
-    assert response.status_code == 408
+    assert response.status_code == 504  # Gateway Timeout instead of 408
     
     json_response = response.json()
     assert "detail" in json_response
@@ -157,3 +157,23 @@ async def test_multiple_concurrent_requests():
     for response in responses:
         assert response.status_code == 200
         assert response.json() == {"status": "concurrent"}
+
+
+def test_status_code_408_is_rejected():
+    """Test that using status code 408 raises a ValueError."""
+    app = FastAPI()
+    
+    with pytest.raises(ValueError, match="HTTP 408.*should not be used"):
+        app.add_middleware(
+            TimeoutMiddleware,
+            timeout_seconds=1.0,
+            timeout_status_code=408  # This should raise an error
+        )
+
+
+def test_timeout_middleware_function_408_is_rejected():
+    """Test that decorator-style middleware also rejects 408."""
+    from fastapi_timeout import timeout_middleware
+    
+    with pytest.raises(ValueError, match="HTTP 408.*should not be used"):
+        timeout_middleware(timeout_seconds=1.0, timeout_status_code=408)

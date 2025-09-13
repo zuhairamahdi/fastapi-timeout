@@ -1,5 +1,12 @@
 """
-Example usage of fastapi-timeout middleware with ASGI middleware approach.
+Exampl# Add timeout middleware with 3 second timeout
+app.add_middleware(
+    TimeoutMiddleware,
+    timeout_seconds=3.0,
+    timeout_status_code=503,  # Service Unavailable (safe choice)
+    timeout_message="Your request took too long to process",
+    include_process_time=True
+)of fastapi-timeout middleware with ASGI middleware approach.
 """
 
 import asyncio
