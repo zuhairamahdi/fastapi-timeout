@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastapi-timeout"
-version = "0.1.1"
+version = "0.1.1-2"
 description = "Configurable timeout middleware for FastAPI applications"
 readme = "README.md"
 requires-python = ">=3.7"
 license = {text = "MIT"}
 authors = [
-    {name = "Zuhair Amahdi", email = "zuhairamahdi@gmail.com"}
+    {name = "Zuhair Abdulla", email = "zuhairamahdi@gmail.com"}
 ]
 keywords = ["fastapi", "timeout", "middleware", "async"]
 classifiers = [

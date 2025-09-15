@@ -1,6 +1,7 @@
 import time
 import asyncio
 from typing import Optional, Callable, Dict, Any
+from functools import wraps
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.status import HTTP_504_GATEWAY_TIMEOUT
@@ -196,3 +197,112 @@ async def _timeout_middleware_function(
             content=content,
             status_code=timeout_status_code
         )
+
+
+# Per-endpoint timeout decorator
+def timeout(
+    timeout_seconds: float,
+    timeout_status_code: int = HTTP_504_GATEWAY_TIMEOUT,
+    timeout_message: str = "Request processing time exceeded limit",
+    include_process_time: bool = True,
+    custom_timeout_handler: Optional[Callable[[Request, float], Response]] = None
+):
+    """
+    Decorator for applying timeout to individual FastAPI endpoints.
+    
+    This decorator allows you to set different timeout values for specific endpoints
+    without using global middleware. The timeout is applied per endpoint invocation.
+    
+    Args:
+        timeout_seconds (float): Maximum time in seconds to wait for endpoint completion.
+        timeout_status_code (int): HTTP status code to return on timeout.
+                                  WARNING: Do not use 408 (Request Timeout) as it causes 
+                                  browsers to automatically retry requests.
+        timeout_message (str): Error message to include in timeout response.
+        include_process_time (bool): Whether to include actual processing time in response.
+        custom_timeout_handler (Callable): Optional custom function to handle timeout response.
+                                         Should accept (request, process_time) and return Response.
+    
+    Example:
+        ```python
+        from fastapi import FastAPI
+        from fastapi_timeout import timeout
+        
+        app = FastAPI()
+        
+        @app.get("/fast")
+        @timeout(5.0)
+        async def fast_endpoint():
+            return {"message": "Fast endpoint with 5s timeout"}
+            
+        @app.get("/slow")
+        @timeout(30.0, timeout_status_code=503, timeout_message="Slow operation timeout")
+        async def slow_endpoint():
+            return {"message": "Slow endpoint with 30s timeout"}
+        ```
+    
+    Note: 
+        - The decorator should be placed below the FastAPI route decorator
+        - Each decorated endpoint will have its own timeout independent of global middleware
+        - This approach gives you fine-grained control over timeout behavior per endpoint
+    """
+    
+    # Validate timeout_status_code to prevent problematic codes
+    if timeout_status_code == 408:
+        raise ValueError(
+            "HTTP 408 (Request Timeout) should not be used as it causes browsers "
+            "and HTTP clients to automatically retry requests. Use 504 (Gateway Timeout) "
+            "or 503 (Service Unavailable) instead."
+        )
+    
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            # Extract request from arguments if present
+            request = None
+            for arg in args:
+                if isinstance(arg, Request):
+                    request = arg
+                    break
+            
+            # If no Request object found in args, check kwargs
+            if request is None:
+                request = kwargs.get('request')
+            
+            start_time = time.time()
+            
+            try:
+                # Execute the original endpoint function with timeout
+                result = await asyncio.wait_for(
+                    func(*args, **kwargs),
+                    timeout=timeout_seconds
+                )
+                return result
+                
+            except asyncio.TimeoutError:
+                process_time = time.time() - start_time
+                
+                # Use custom timeout handler if provided
+                if custom_timeout_handler and request:
+                    return custom_timeout_handler(request, process_time)
+                
+                # Create default timeout response
+                content: Dict[str, Any] = {
+                    "detail": timeout_message,
+                    "timeout_seconds": timeout_seconds
+                }
+                
+                if include_process_time:
+                    content["processing_time"] = round(process_time, 3)
+                
+                return JSONResponse(
+                    content=content,
+                    status_code=timeout_status_code
+                )
+        
+        return wrapper
+    return decorator
+
+
+# Alias for backward compatibility and convenience
+endpoint_timeout = timeout

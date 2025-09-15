@@ -177,3 +177,114 @@ def test_timeout_middleware_function_408_is_rejected():
     
     with pytest.raises(ValueError, match="HTTP 408.*should not be used"):
         timeout_middleware(timeout_seconds=1.0, timeout_status_code=408)
+
+
+def test_timeout_decorator():
+    """Test the timeout decorator functionality."""
+    from fastapi_timeout import timeout
+    
+    app = FastAPI()
+    
+    @app.get("/decorated")
+    @timeout(1.0, timeout_message="Decorated endpoint timeout")
+    async def decorated_endpoint():
+        await asyncio.sleep(2.0)  # Will timeout
+        return {"status": "done"}
+    
+    @app.get("/decorated-fast") 
+    @timeout(2.0)
+    async def decorated_fast_endpoint():
+        await asyncio.sleep(0.5)  # Should complete
+        return {"status": "fast"}
+    
+    client = TestClient(app)
+    
+    # Test timeout
+    response = client.get("/decorated")
+    assert response.status_code == 504
+    json_response = response.json()
+    assert json_response["detail"] == "Decorated endpoint timeout"
+    assert json_response["timeout_seconds"] == 1.0
+    assert "processing_time" in json_response
+    
+    # Test successful completion
+    response = client.get("/decorated-fast")
+    assert response.status_code == 200
+    assert response.json() == {"status": "fast"}
+
+
+def test_timeout_decorator_custom_handler():
+    """Test timeout decorator with custom handler."""
+    from fastapi_timeout import timeout
+    
+    def custom_handler(request, process_time):
+        return JSONResponse(
+            status_code=503,
+            content={"custom": "timeout", "time": process_time}
+        )
+    
+    app = FastAPI()
+    
+    @app.get("/custom")
+    @timeout(0.5, custom_timeout_handler=custom_handler)
+    async def custom_endpoint():
+        await asyncio.sleep(1.0)
+        return {"status": "done"}
+    
+    client = TestClient(app)
+    response = client.get("/custom")
+    
+    assert response.status_code == 503
+    json_response = response.json()
+    assert json_response["custom"] == "timeout"
+    assert "time" in json_response
+
+
+def test_timeout_decorator_408_rejection():
+    """Test that timeout decorator rejects 408 status code."""
+    from fastapi_timeout import timeout
+    
+    with pytest.raises(ValueError, match="HTTP 408.*should not be used"):
+        @timeout(1.0, timeout_status_code=408)
+        async def bad_endpoint():
+            return {"status": "bad"}
+
+
+def test_mixed_timeout_approaches():
+    """Test combination of middleware and decorator timeouts."""
+    from fastapi_timeout import timeout
+    
+    app = FastAPI()
+    
+    # Add global middleware
+    app.add_middleware(
+        TimeoutMiddleware,
+        timeout_seconds=5.0,
+        timeout_message="Global timeout"
+    )
+    
+    @app.get("/global")
+    async def global_endpoint():
+        await asyncio.sleep(6.0)  # Will hit global timeout
+        return {"status": "global"}
+    
+    @app.get("/decorated")
+    @timeout(2.0, timeout_message="Decorator timeout")
+    async def decorated_endpoint():
+        await asyncio.sleep(3.0)  # Will hit decorator timeout first
+        return {"status": "decorated"}
+    
+    client = TestClient(app)
+    
+    # Test global timeout
+    response = client.get("/global")
+    assert response.status_code == 504
+    json_response = response.json()
+    assert "Global timeout" in json_response["detail"]
+    
+    # Test decorator timeout (should override global)
+    response = client.get("/decorated")  
+    assert response.status_code == 504
+    json_response = response.json()
+    assert json_response["detail"] == "Decorator timeout"
+    assert json_response["timeout_seconds"] == 2.0

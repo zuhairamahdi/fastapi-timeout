@@ -9,14 +9,14 @@ pip install fastapi-timeout
 
 ### Install from Source
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/zuhairamahdi/fastapi-timeout.git
 cd fastapi-timeout
 pip install .
 ```
 
 ### Install for Development
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/zuhairamahdi/fastapi-timeout.git
 cd fastapi-timeout
 pip install -e ".[dev]"
 ```

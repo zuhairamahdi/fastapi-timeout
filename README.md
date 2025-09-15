@@ -4,13 +4,15 @@ A configurable timeout middleware for FastAPI applications that automatically ha
 
 ## Features
 
-- ⏱️ **Configurable timeout duration** - Set custom timeout values per application
+- ⏱️ **Configurable timeout duration** - Set custom timeout values per application or per endpoint
+- 🎯 **Per-endpoint control** - Use `@timeout()` decorator for fine-grained timeout control
 - 📝 **Customizable error responses** - Configure status codes, messages, and response format
-- 🔧 **Multiple integration methods** - Use as ASGI middleware or HTTP middleware decorator
+- 🔧 **Multiple integration methods** - Use as ASGI middleware, HTTP middleware, or endpoint decorator
 - 📊 **Processing time tracking** - Optional inclusion of actual processing time in timeout responses
-- 🎯 **Custom timeout handlers** - Provide your own timeout response logic
+- � **Custom timeout handlers** - Provide your own timeout response logic
 - 🚀 **High performance** - Minimal overhead using asyncio
 - 📚 **Type hints included** - Full typing support for better IDE integration
+- ⚠️ **Safe defaults** - Prevents problematic HTTP 408 status code usage
 
 ## Installation
 
@@ -56,6 +58,25 @@ async def add_timeout(request: Request, call_next):
     return await timeout_handler(request, call_next)
 ```
 
+### Method 3: Per-Endpoint Decorator
+
+```python
+from fastapi import FastAPI
+from fastapi_timeout import timeout
+
+app = FastAPI()
+
+@app.get("/fast-endpoint")
+@timeout(5.0)  # 5 second timeout for this endpoint only
+async def fast_endpoint():
+    return {"message": "Fast endpoint with 5s timeout"}
+
+@app.get("/slow-endpoint")  
+@timeout(30.0, timeout_status_code=503, timeout_message="Slow operation timeout")
+async def slow_endpoint():
+    return {"message": "Slow endpoint with 30s timeout"}
+```
+
 ## Configuration Options
 
 ### Basic Configuration
@@ -98,6 +119,76 @@ app.add_middleware(
 )
 ```
 
+## Per-Endpoint Timeout Control
+
+### Using the @timeout Decorator
+
+For fine-grained control, you can apply different timeouts to specific endpoints using the `@timeout` decorator:
+
+```python
+from fastapi import FastAPI, Request
+from fastapi_timeout import timeout, TimeoutMiddleware
+from fastapi.responses import JSONResponse
+
+app = FastAPI()
+
+# Optional: Global fallback timeout
+app.add_middleware(TimeoutMiddleware, timeout_seconds=30.0)
+
+@app.get("/api/quick")
+@timeout(2.0)  # 2 second timeout
+async def quick_operation():
+    return {"message": "Quick operation"}
+
+@app.get("/api/medium")
+@timeout(10.0, timeout_message="Medium operation timed out")
+async def medium_operation():
+    return {"message": "Medium operation"}
+
+@app.get("/api/batch")
+@timeout(60.0, timeout_status_code=503)
+async def batch_operation():
+    return {"message": "Long batch operation"}
+
+# Custom timeout handler for specific endpoint
+def vip_timeout_handler(request: Request, process_time: float):
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": "VIP service busy",
+            "retry_after": 30,
+            "processing_time": process_time
+        }
+    )
+
+@app.get("/api/vip")
+@timeout(5.0, custom_timeout_handler=vip_timeout_handler)
+async def vip_endpoint():
+    return {"message": "VIP operation"}
+```
+
+### Decorator Features
+
+- **Per-endpoint control**: Each endpoint can have its own timeout
+- **Overrides global middleware**: Decorator timeouts take precedence
+- **All configuration options**: Supports custom messages, status codes, and handlers
+- **Easy to apply**: Simply add `@timeout(seconds)` below your route decorator
+
+### Mixed Approach
+
+You can combine global middleware with per-endpoint decorators:
+
+```python
+# Global timeout for most endpoints
+app.add_middleware(TimeoutMiddleware, timeout_seconds=10.0)
+
+# Override for specific endpoints
+@app.get("/slow-report")
+@timeout(60.0)  # This endpoint gets 60 seconds instead of 10
+async def generate_report():
+    return {"message": "Report generated"}
+```
+
 ## Response Format
 
 ### Default Timeout Response
@@ -121,6 +212,21 @@ When a request times out, the middleware returns a JSON response:
 - `include_process_time`: Whether to include actual processing time (default: True)
 
 ## Use Cases
+
+### Different Timeouts for Different Operations
+```python
+@app.get("/api/search")
+@timeout(5.0)  # Quick search
+async def search(): pass
+
+@app.post("/api/upload")
+@timeout(120.0)  # File upload
+async def upload(): pass
+
+@app.get("/api/report")
+@timeout(300.0)  # Long report generation
+async def generate_report(): pass
+```
 
 ### Web APIs with Database Queries
 ```python

@@ -5,6 +5,7 @@ pyproject.toml
 setup.py
 examples/advanced_example.py
 examples/basic_example.py
+examples/decorator_example.py
 fastapi_timeout/__init__.py
 fastapi_timeout/middleware.py
 fastapi_timeout/py.typed
